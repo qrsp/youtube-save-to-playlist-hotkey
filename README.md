@@ -1,6 +1,6 @@
 # YouTube Save to Playlist Hotkey
 
-[![Install Userscript](https://img.shields.io/badge/Install%20Userscript-Playlist%20HOTKEY-blue?style=for-the-badge)](https://raw.githubusercontent.com/qrsp/youtube-save-to-playlist-hotkey/refs/heads/main/youtube-save-to-playlist-hotkey.user.js)
+[![Install Userscript](https://img.shields.io/badge/Install%20Userscript-Playlist%20HOTKEY-blue?style=for-the-badge)](https://raw.githubusercontent.com/qrsp/youtube-save-to-playlist-hotkey/main/youtube-save-to-playlist-hotkey.user.js)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Version](https://img.shields.io/badge/version-0.1-blue)
 
