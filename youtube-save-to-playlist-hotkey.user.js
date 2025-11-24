@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Youtube Save To Playlist Hotkey
-// @version      0.1
+// @version      0.0.2
 // @author       qrsp
 // @updateURL    https://raw.githubusercontent.com/qrsp/youtube-save-to-playlist-hotkey/main/youtube-save-to-playlist-hotkey.user.js
 // @downloadURL  https://raw.githubusercontent.com/qrsp/youtube-save-to-playlist-hotkey/main/youtube-save-to-playlist-hotkey.user.js
@@ -58,10 +58,7 @@
 
     await delay(500);
 
-    // Find and click the save button using SVG path selector for bookmark icon
-    let saveButton = document.querySelector(
-      '[d="M19 2H5a2 2 0 00-2 2v16.887c0 1.266 1.382 2.048 2.469 1.399L12 18.366l6.531 3.919c1.087.652 2.469-.131 2.469-1.397V4a2 2 0 00-2-2ZM5 20.233V4h14v16.233l-6.485-3.89-.515-.309-.515.309L5 20.233Z"]',
-    ).parentElement.parentElement;
+    let saveButton = [...document.querySelectorAll('yt-formatted-string')].find(el => el.textContent === '保存');
     if (saveButton) {
       saveButton.click();
     } else {
