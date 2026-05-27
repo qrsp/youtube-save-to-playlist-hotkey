@@ -4,35 +4,63 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Version](https://img.shields.io/badge/version-0.1-blue)
 
-A userscript that adds convenient keyboard shortcuts for managing YouTube playlists. Save videos to specific playlists or remove them with simple key presses!
+A userscript that adds convenient, highly responsive keyboard shortcuts for managing YouTube playlists. Save videos to specific playlists or remove them instantly with customizable hotkeys.
 
-## 🎮 Usage
+---
 
-Once installed, the following keyboard shortcuts will be available on any YouTube page:
+## Usage & Defaults
 
-| Key | Action |
-|-----|--------|
-| `P` | Open the "Save to playlist" dialog |
-| `A` | Save current video to "checklist" playlist |
-| `V` | Save current video to "checklist2" playlist |
-| `N` | Remove current video from playlist |
+Once installed, the following default shortcuts are available on any YouTube page:
 
-## ⚙️ Customization
+| Key | Action | Visual Toast Alert |
+|:---:|:---|:---|
+| **P** | Open/Toggle the "Save to playlist" dialog | `Playlist dialog opened` |
+| **A** | Toggle current video in the `"checklist"` playlist | `Saving to "checklist"...` ➡️ `Toggled playlist: "checklist"` |
+| **V** | Toggle current video in the `"checklist2"` playlist | `Saving to "checklist2"...` ➡️ `Toggled playlist: "checklist2"` |
+| **N** | Delete the currently selected video from your playlist panel | `Removing from playlist...` ➡️ `Removed from playlist` |
 
-To customize the playlist names or add more shortcuts:
+---
 
-1. Open your userscript manager
-2. Find "Youtube Save To Playlist Hotkey" in your installed scripts
-3. Click "Edit"
-4. Modify the playlist names or add new shortcuts at the bottom of the script:
+## Features
+
+- **Centralized Configuration**: All options are defined in a clean `CONFIG` block at the top of the script. No need to look through hundreds of lines of code to change keys or names.
+- **Glassmorphic Toasts**: Elegant, non-intrusive, micro-animated dark-mode compatible notifications display at the bottom-right corner to confirm shortcut operations.
+- **Smart Element Polling**: Eliminates brittle static `setTimeout` calls. The script uses robust async elements polling that instantly executes clicks the millisecond they appear in the DOM.
+- **Safe Hotkey Interceptor**: Automatically bypasses hotkeys if you are typing in comments, live chat, search fields, or any editable formatting block.
+
+---
+
+## Customization
+
+Customizing your playlists, shortcut keys, or toast alerts is incredibly easy:
+
+1. Open your userscript manager (e.g., Tampermonkey, Violentmonkey).
+2. Open **Youtube Save To Playlist Hotkey** in the editor.
+3. Edit the `CONFIG` block located at the very top:
 
 ```javascript
-// Change these lines to use your own playlist names
-addKeydownEventListener("v", () => saveToPlaylist("YOUR_PLAYLIST_NAME_1"));
-addKeydownEventListener("a", () => saveToPlaylist("YOUR_PLAYLIST_NAME_2"));
-
-// Add more shortcuts if needed
-addKeydownEventListener("s", () => saveToPlaylist("Another Playlist"));
+// ==========================================
+// 1. CONFIGURATION
+// ==========================================
+const CONFIG = {
+  // Map shortcut keys (must be lowercase) to your playlist names
+  playlists: {
+    v: "checklist2",
+    a: "checklist",
+    s: "My Custom Playlist", // Simply add a new line to bind a new playlist!
+  },
+  // Map shortcut keys (must be lowercase) to built-in actions
+  actions: {
+    p: "openDialog",
+    n: "deleteCurrent",
+  },
+  // Polling settings (in milliseconds)
+  timeoutMs: 5000,
+  pollIntervalMs: 50,
+  // Visual feedback settings
+  enableToasts: true,       // Set to false if you want silent operations
+  toastDurationMs: 3000,    // Toast visibility length
+};
 ```
 
-Available keys for shortcuts: any single letter or number key that doesn't conflict with YouTube's existing shortcuts.
+4. Save the changes in your userscript manager, and reload YouTube!
