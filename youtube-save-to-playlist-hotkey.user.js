@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Youtube Save To Playlist Hotkey
-// @version      0.2
+// @version      0.3.1
 // @author       qrsp
 // @updateURL    https://raw.githubusercontent.com/qrsp/youtube-save-to-playlist-hotkey/main/youtube-save-to-playlist-hotkey.user.js
 // @downloadURL  https://raw.githubusercontent.com/qrsp/youtube-save-to-playlist-hotkey/main/youtube-save-to-playlist-hotkey.user.js
@@ -49,23 +49,23 @@
   // 2. CSS SELECTOR REGISTRY
   // ==========================================
   const SELECTORS = {
-    // Main button to open "More actions" or playlist options on YouTube
-    menuButton: "yt-button-shape#button-shape yt-touch-feedback-shape",
-    
-    // Save button icon inside the actions dropdown (SVG path matching bookmark icon)
-    saveButtonIcon: '[d="M19 2H5a2 2 0 00-2 2v16.887c0 1.266 1.382 2.048 2.469 1.399L12 18.366l6.531 3.919c1.087.652 2.469-.131 2.469-1.397V4a2 2 0 00-2-2ZM5 20.233V4h14v16.233l-6.485-3.89-.515-.309-.515.309L5 20.233Z"]',
-    
-    // Playlist item checkbox titles inside the save popup dialog
-    playlistTitle: ".ytAttributedStringHost.ytListItemViewModelTitle.ytAttributedStringWhiteSpacePreWrap.ytAttributedStringWordWrapping",
-    
-    // Three-dot menu button on the currently playing/selected video in a playlist panel
-    playlistVideoMenuIcon: 'ytd-playlist-panel-video-renderer[selected] path[d="M12 4a2 2 0 100 4 2 2 0 000-4Zm0 6a2 2 0 100 4 2 2 0 000-4Zm0 6a2 2 0 100 4 2 2 0 000-4Z"]',
-    
-    // Delete button inside the playlist panel video menu (SVG path matching trash icon)
-    deleteButtonIcon: '[d="M19 3h-4V2a1 1 0 00-1-1h-4a1 1 0 00-1 1v1H5a2 2 0 00-2 2h18a2 2 0 00-2-2ZM6 19V7H4v12a4 4 0 004 4h8a4 4 0 004-4V7h-2v12a2 2 0 01-2 2H8a2 2 0 01-2-2Zm4-11a1 1 0 00-1 1v8a1 1 0 102 0V9a1 1 0 00-1-1Zm4 0a1 1 0 00-1 1v8a1 1 0 002 0V9a1 1 0 00-1-1Z"]',
-    
-    // Dialog element to check if save-to-playlist modal is already open
-    dialogElement: "ytd-add-to-playlist-renderer",
+    // Limit video actions to the current watch page, excluding recommendations.
+    videoActions: "ytd-watch-metadata #actions ytd-menu-renderer",
+    menuButton: "yt-button-shape#button-shape button, yt-icon-button.dropdown-trigger button",
+
+    // Both outlined and filled bookmark icons used by the new UI.
+    saveButtonIcon: 'path[d="M19 2H5a2 2 0 00-2 2v16.887c0 1.266 1.382 2.048 2.469 1.399L12 18.366l6.531 3.919c1.087.652 2.469-.131 2.469-1.397V4a2 2 0 00-2-2ZM5 20.233V4h14v16.233l-6.485-3.89-.515-.309-.515.309L5 20.233Z"], path[d="M19 2H5a2 2 0 00-2 2v16.887c0 1.266 1.382 2.048 2.469 1.399L12 18.366l6.531 3.919c1.087.652 2.469-.131 2.469-1.397V4a2 2 0 00-2-2Z"]',
+    popupMenu: "ytd-popup-container ytd-menu-popup-renderer, ytd-popup-container yt-sheet-view-model",
+
+    // The new save sheet contains toggleable items with actual menuitem buttons.
+    dialogElement: "ytd-popup-container yt-sheet-view-model",
+    playlistItem: "toggleable-list-item-view-model",
+    playlistTitle: ".ytListItemViewModelTitle",
+    playlistButton: 'button[role="menuitem"][aria-pressed]',
+
+    selectedVideo: "ytd-playlist-panel-video-renderer[selected]",
+    playlistVideoMenuIcon: 'path[d="M12 4a2 2 0 100 4 2 2 0 000-4Zm0 6a2 2 0 100 4 2 2 0 000-4Zm0 6a2 2 0 100 4 2 2 0 000-4Z"]',
+    deleteButtonIcon: 'path[d="M19 3h-4V2a1 1 0 00-1-1h-4a1 1 0 00-1 1v1H5a2 2 0 00-2 2h18a2 2 0 00-2-2ZM6 19V7H4v12a4 4 0 004 4h8a4 4 0 004-4V7h-2v12a2 2 0 01-2 2H8a2 2 0 01-2-2Zm4-11a1 1 0 00-1 1v8a1 1 0 102 0V9a1 1 0 00-1-1Zm4 0a1 1 0 00-1 1v8a1 1 0 002 0V9a1 1 0 00-1-1Z"]',
   };
 
   // ==========================================
@@ -78,80 +78,95 @@
   };
 
   /**
-   * Simple helper to wait for an element to appear in the DOM
+   * YouTube retains closed popups in the DOM, so connectivity alone is insufficient.
+   * Client rectangles also include items outside a scroll container's viewport.
    */
-  function waitForElement(selector, timeout = CONFIG.timeoutMs) {
-    return new Promise((resolve, reject) => {
-      const startTime = Date.now();
-      const interval = setInterval(() => {
-        const el = document.querySelector(selector);
-        if (el) {
-          clearInterval(interval);
-          resolve(el);
-        } else if (Date.now() - startTime > timeout) {
-          clearInterval(interval);
-          reject(new Error(`Timeout waiting for element: ${selector}`));
-        }
-      }, CONFIG.pollIntervalMs);
-    });
+  function isVisible(element) {
+    if (!element || !element.isConnected) return false;
+    if (element.closest('[hidden], [aria-hidden="true"]')) return false;
+
+    for (let ancestor = element; ancestor; ancestor = ancestor.parentElement) {
+      const style = window.getComputedStyle(ancestor);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') {
+        return false;
+      }
+    }
+    return element.getClientRects().length > 0;
+  }
+
+  function isClickable(element) {
+    return isVisible(element) && !element.disabled && element.getAttribute('aria-disabled') !== 'true';
   }
 
   /**
-   * Wait for an SVG path selector to exist and return its parent at a specified depth
+   * Poll immediately, then until a lookup succeeds or the timeout expires.
    */
-  function waitForSvgParent(pathSelector, depth = 2, timeout = CONFIG.timeoutMs) {
+  function waitFor(find, description, timeout = CONFIG.timeoutMs) {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
-      const interval = setInterval(() => {
-        const path = document.querySelector(pathSelector);
-        if (path) {
-          let element = path;
-          for (let i = 0; i < depth; i++) {
-            if (element.parentElement) {
-              element = element.parentElement;
-            } else {
-              break;
-            }
+      function poll() {
+        try {
+          const result = find();
+          if (result) {
+            resolve(result);
+          } else if (Date.now() - startTime >= timeout) {
+            reject(new Error(`Timeout waiting for ${description}`));
+          } else {
+            setTimeout(poll, CONFIG.pollIntervalMs);
           }
-          clearInterval(interval);
-          resolve(element);
-        } else if (Date.now() - startTime > timeout) {
-          clearInterval(interval);
-          reject(new Error(`Timeout waiting for SVG path parent: ${pathSelector}`));
+        } catch (err) {
+          reject(err);
         }
-      }, CONFIG.pollIntervalMs);
+      }
+      poll();
     });
   }
 
-  /**
-   * Wait for an element matching selector that contains the exact text content
-   */
-  function waitForElementWithText(selector, text, timeout = CONFIG.timeoutMs) {
-    return new Promise((resolve, reject) => {
-      const startTime = Date.now();
-      const interval = setInterval(() => {
-        const elements = document.querySelectorAll(selector);
-        for (const el of elements) {
-          if (el.textContent.trim() === text) {
-            clearInterval(interval);
-            resolve(el);
-            return;
-          }
-        }
-        if (Date.now() - startTime > timeout) {
-          clearInterval(interval);
-          reject(new Error(`Timeout waiting for element with text: "${text}"`));
-        }
-      }, CONFIG.pollIntervalMs);
-    });
+  function findElement(selector, root = document, predicate = isVisible) {
+    return Array.from(root.querySelectorAll(selector)).find(predicate);
+  }
+
+  function waitForElement(selector, { root = document, predicate = isVisible, description = selector } = {}) {
+    return waitFor(() => findElement(selector, root, predicate), description);
   }
 
   /**
-   * Check if the playlist save dialog is currently open and visible in the DOM
+   * Resolve an icon to its actual button/menu item, regardless of wrapper depth.
+   * Icons themselves often have aria-hidden set and are not the click targets.
    */
-  function isDialogOpen() {
-    const dialog = document.querySelector(SELECTORS.dialogElement);
-    return !!(dialog && dialog.isConnected);
+  function findIconButton(root, pathSelector) {
+    for (const path of root.querySelectorAll(pathSelector)) {
+      const button = path.closest('button, [role="menuitem"]');
+      if (button && root.contains(button) && isClickable(button)) return button;
+    }
+    return null;
+  }
+
+  function findPopupAction(pathSelector) {
+    for (const menu of document.querySelectorAll(SELECTORS.popupMenu)) {
+      if (!isVisible(menu)) continue;
+      const button = findIconButton(menu, pathSelector);
+      if (button) return button;
+    }
+    return null;
+  }
+
+  function getOpenSaveDialog() {
+    return findElement(SELECTORS.dialogElement, document, (dialog) =>
+      isVisible(dialog) && !!dialog.querySelector(SELECTORS.playlistItem)
+    );
+  }
+
+  function matchesPlaylist(button, playlistName) {
+    const item = button.closest(SELECTORS.playlistItem);
+    const title = item && item.querySelector(SELECTORS.playlistTitle);
+    return !!title && title.textContent.trim() === playlistName && isClickable(button);
+  }
+
+  function findPlaylistButton(dialog, playlistName) {
+    return dialog && findElement(SELECTORS.playlistButton, dialog, (button) =>
+      matchesPlaylist(button, playlistName)
+    );
   }
 
   // ==========================================
@@ -160,6 +175,52 @@
   function showToast(message, type = 'info') {
     if (!CONFIG.enableToasts) return;
 
+    // Notification failures must not interrupt playlist actions.
+    try {
+      renderToast(message, type);
+    } catch (err) {
+      logger.warn("Could not display toast", err);
+    }
+  }
+
+  function createToastIcon(type) {
+    function createSvgElement(tag, attributes) {
+      const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [name, value] of Object.entries(attributes)) {
+        element.setAttribute(name, value);
+      }
+      return element;
+    }
+
+    const colors = { success: '#2ba640', error: '#ff4e4e', info: '#3ea6ff' };
+    const svg = createSvgElement('svg', {
+      width: '16', height: '16', viewBox: '0 0 24 24', fill: 'none',
+      stroke: colors[type] || colors.info,
+      'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    });
+
+    let shapes;
+    if (type === 'success') {
+      shapes = [['polyline', { points: '20 6 9 17 4 12' }]];
+    } else if (type === 'error') {
+      shapes = [
+        ['line', { x1: '18', y1: '6', x2: '6', y2: '18' }],
+        ['line', { x1: '6', y1: '6', x2: '18', y2: '18' }],
+      ];
+    } else {
+      shapes = [
+        ['circle', { cx: '12', cy: '12', r: '10' }],
+        ['line', { x1: '12', y1: '16', x2: '12', y2: '12' }],
+        ['line', { x1: '12', y1: '8', x2: '12.01', y2: '8' }],
+      ];
+    }
+    for (const [tag, attributes] of shapes) {
+      svg.appendChild(createSvgElement(tag, attributes));
+    }
+    return svg;
+  }
+
+  function renderToast(message, type) {
     let container = document.getElementById('yt-save-hotkey-toast-container');
     if (!container) {
       container = document.createElement('div');
@@ -219,16 +280,11 @@
     const toast = document.createElement('div');
     toast.className = `yt-save-hotkey-toast ${type}`;
 
-    let iconHtml = '';
-    if (type === 'success') {
-      iconHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2ba640" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-    } else if (type === 'error') {
-      iconHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff4e4e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
-    } else {
-      iconHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3ea6ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
-    }
-
-    toast.innerHTML = `${iconHtml}<span>${message}</span>`;
+    // Construct nodes directly to comply with YouTube's Trusted Types CSP.
+    const text = document.createElement('span');
+    text.textContent = message;
+    toast.appendChild(createToastIcon(type));
+    toast.appendChild(text);
     container.appendChild(toast);
 
     // Force reflow to trigger transition
@@ -252,16 +308,20 @@
     logger.log("Attempting to remove current video from the playlist panel...");
     showToast("Removing from playlist...", "info");
     try {
-      // Find the selected video three-dot menu
-      const menuBtn = await waitForSvgParent(SELECTORS.playlistVideoMenuIcon);
+      const menuBtn = await waitFor(() => {
+        const video = findElement(SELECTORS.selectedVideo);
+        return video && findIconButton(video, SELECTORS.playlistVideoMenuIcon);
+      }, "the selected video's menu button");
       menuBtn.click();
 
-      // Find the delete button in the popup menu
-      const deleteBtn = await waitForSvgParent(SELECTORS.deleteButtonIcon);
+      const deleteBtn = await waitFor(
+        () => findPopupAction(SELECTORS.deleteButtonIcon),
+        "the remove-from-playlist menu item"
+      );
       deleteBtn.click();
 
-      logger.log("Successfully removed video from playlist.");
-      showToast("Removed from playlist", "success");
+      logger.log("Remove-from-playlist menu item clicked.");
+      showToast("Removal requested", "info");
     } catch (err) {
       logger.error("Failed to remove video from playlist", err);
       showToast("Failed to remove video", "error");
@@ -269,15 +329,37 @@
   }
 
   async function openSaveToPlaylistDialog() {
+    const openDialog = getOpenSaveDialog();
+    if (openDialog) return openDialog;
+
     logger.log("Opening the save-to-playlist dialog...");
     try {
-      const menuBtn = await waitForElement(SELECTORS.menuButton);
-      menuBtn.click();
+      const trigger = await waitFor(() => {
+        for (const actions of document.querySelectorAll(SELECTORS.videoActions)) {
+          if (!isVisible(actions)) continue;
+          const saveButton = findIconButton(actions, SELECTORS.saveButtonIcon);
+          if (saveButton) return { button: saveButton, direct: true };
+        }
+        for (const actions of document.querySelectorAll(SELECTORS.videoActions)) {
+          if (!isVisible(actions)) continue;
+          const menuButton = findElement(SELECTORS.menuButton, actions, isClickable);
+          if (menuButton) return { button: menuButton, direct: false };
+        }
+        return null;
+      }, "the current video's save or more-actions button");
+      trigger.button.click();
 
-      const saveBtn = await waitForSvgParent(SELECTORS.saveButtonIcon);
-      saveBtn.click();
-      
-      logger.log("Save dialog trigger clicked successfully.");
+      if (!trigger.direct) {
+        const saveBtn = await waitFor(
+          () => findPopupAction(SELECTORS.saveButtonIcon),
+          "the save-to-playlist menu item"
+        );
+        saveBtn.click();
+      }
+
+      const dialog = await waitFor(getOpenSaveDialog, "the visible save-to-playlist sheet");
+      logger.log("Save-to-playlist sheet opened.");
+      return dialog;
     } catch (err) {
       logger.error("Failed to open save playlist dialog", err);
       showToast("Could not open save menu", "error");
@@ -289,13 +371,24 @@
     logger.log(`Attempting to toggle video in playlist: "${playlistName}"`);
     showToast(`Saving to "${playlistName}"...`, "info");
     try {
-      if (!isDialogOpen()) {
-        await openSaveToPlaylistDialog();
+      const dialog = await openSaveToPlaylistDialog();
+      const targetButton = await waitForElement(SELECTORS.playlistButton, {
+        root: dialog,
+        predicate: (button) => matchesPlaylist(button, playlistName),
+        description: `playlist "${playlistName}"`,
+      });
+      const previousState = targetButton.getAttribute('aria-pressed');
+      if (previousState !== 'true' && previousState !== 'false') {
+        throw new Error(`Unknown selection state for playlist "${playlistName}"`);
       }
+      const expectedState = previousState === 'true' ? 'false' : 'true';
+      targetButton.click();
 
-      // Find and click the target playlist item by name
-      const targetSpan = await waitForElementWithText(SELECTORS.playlistTitle, playlistName);
-      targetSpan.click();
+      // Re-query because YouTube may replace the item's button after a click.
+      await waitFor(() => {
+        const button = findPlaylistButton(getOpenSaveDialog(), playlistName);
+        return button && button.getAttribute('aria-pressed') === expectedState;
+      }, `playlist "${playlistName}" to change selection`);
 
       logger.log(`Successfully toggled video in: "${playlistName}"`);
       showToast(`Toggled playlist: "${playlistName}"`, "success");
